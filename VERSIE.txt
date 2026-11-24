@@ -1,0 +1,80 @@
+VVO CoachApp
+Build: 2026-11-11
+
+App en Code.gs 2026-11-11: van plek ruilen tijdens de wedstrijd
+- In Live tik je een speler op het veld en daarna een tweede: ze ruilen van
+  plek. Nog een keer op dezelfde speler tikken annuleert.
+- Een plekruil telt niet als wissel en niet als wisselbeurt. Hij staat wel
+  op de tijdlijn ("Van plek geruild: ...") en komt bij de andere trainers aan.
+- "Mijn laatste ongedaan" draait ook een plekruil terug.
+- Heeft een andere trainer intussen een van de twee spelers gewisseld, dan
+  vervalt de ruil.
+- Na een wissel of plekruil in een periode verdwijnt de keuze "Doorgaan met
+  huidige opstelling / Volgens het plan" voor die periode.
+- Code.gs: seizoenscijfers en bouwAnalyse nemen plekruilen mee voor de linie
+  waarin een speler stond en voor "Doorgaan met huidige opstelling".
+  Geen nieuwe kolommen: setup is niet nodig.
+
+Eerder, build 2026-11-03b:
+
+App 2026-11-03b:
+- Het wedstrijdoverzicht toont de uitslag van elke gespeelde wedstrijd zoals
+  de sheet die telt, inclusief correcties achteraf. Eerder zag je alleen een
+  uitslag bij wedstrijden die op jouw telefoon stonden, en dan zonder de
+  correcties of doelpunten van andere trainers.
+- Geen wijziging in Code.gs: de sheets hoeven niet opnieuw.
+
+
+Code.gs 2026-11-03:
+- SpreadsheetApp.flush() voor het vrijgeven van het slot. Zonder flush kregen
+  gelijktijdige regels hetzelfde volgnummer of kwam een gebeurtenis twee keer
+  in de sheet. Regels met een dubbel volgnummer kwamen niet aan bij andere
+  trainers.
+- Gebeurtenissen die al dubbel in de sheet staan, tellen nog maar een keer
+  (in de app na Wedstrijd ophalen, in het seizoensoverzicht en in bouwAnalyse).
+- Analyse_periodes krijgt een regel met periode 0 voor doelpunten waarvan de
+  periode onbekend is (correcties achteraf). Zo klopt het totaal per wedstrijd.
+
+Eerder, build 2026-10-28:
+
+Nieuw: competitieperiodes (CP1 tot en met CP4)
+
+- Elke wedstrijd hoort bij een competitieperiode. Bestaande wedstrijden
+  horen automatisch bij CP1.
+- Wedstrijdoverzicht: bovenaan vier knoppen CP1 tot en met CP4, met per
+  periode het aantal wedstrijden. Het overzicht toont alleen de gekozen
+  periode. De keuze wordt per team onthouden. Zolang je niets kiest, opent
+  de app op de periode van de eerstvolgende geplande wedstrijd.
+- Een nieuwe wedstrijd hoort bij de periode die je op dat moment bekijkt.
+  Bij aanpassen (potloodje) kun je de periode wijzigen.
+- Statistieken > Hele seizoen: filter Alles, CP1, CP2, CP3, CP4. Daarboven
+  een vergelijking per competitieperiode: gespeeld, gewonnen-gelijk-verloren,
+  doelpunten en gemiddeld doelsaldo per wedstrijd.
+- Analyse_periodes en Analyse_spelers hebben een kolom competitieperiode,
+  voor draaitabellen per periode. Analyse_periodes heeft ook een kolom
+  start (plan of doorgegaan).
+
+Hersteld in de sheet:
+- Seizoenscijfers en bouwAnalyse telden verwijderde doelpunten nog mee en
+  negeerden "Doorgaan met huidige opstelling". Beide gebruiken nu dezelfde
+  rekenkern als de app.
+- Een aanpassing door een andere trainer (bijvoorbeeld een nieuwe
+  tegenstander) is nu ook zichtbaar op telefoons die de wedstrijd al
+  lokaal hadden staan.
+
+=========================================================================
+WAT JE MOET DOEN
+=========================================================================
+In BEIDE sheets:
+1. Extensies > Apps Script. Vervang de code door de nieuwe Code.gs. Opslaan.
+2. Draai setup. In het uitvoeringslogboek hoort te staan:
+       Toegevoegd: Wedstrijden.competitieperiode
+3. Implementeren > Implementatie beheren > potlood > Versie: Nieuw.
+4. Open je webapp-URL in een browser: "schemaOk":true.
+
+Daarna de app publiceren:
+   pnpm install
+   pnpm build
+   npx wrangler deploy -c dist/server/wrangler.json --message "2026-11-11"
+
+Controle: head -2 VERSIE.txt  (hoort Build: 2026-11-11)
