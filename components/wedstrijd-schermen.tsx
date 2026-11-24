@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Veld, VolledigVeld, type Stand } from './veld';
 import type { PlanStand } from '@/lib/team-data';
 import {
+  ALLE_POSITIES,
   PERIODES,
   PRESETS,
   actief,
@@ -593,6 +594,8 @@ export function Live({
   onDoelpuntTegen,
   onWissel,
   onRuil,
+  formaties,
+  onFormatie,
   onOngedaan,
   kanOngedaan,
   onVerversen,
@@ -616,6 +619,8 @@ export function Live({
   onDoelpuntTegen: () => void;
   onWissel: (uit: string, erin: string) => void;
   onRuil: (a: string, b: string) => void;
+  formaties: string[];
+  onFormatie: (formatie: string) => void;
   onOngedaan: () => void;
   kanOngedaan: boolean;
   onVerversen: () => void;
@@ -631,7 +636,7 @@ export function Live({
   mogelijkDubbel: Set<string>;
   onCorrigeer: (id: string) => void;
 }) {
-  const [kiezer, setKiezer] = useState<'doelpunt' | 'wissel' | null>(null);
+  const [kiezer, setKiezer] = useState<'doelpunt' | 'wissel' | 'formatie' | null>(null);
   const [vergroot, setVergroot] = useState(false);
   const [veldStand, setVeldStand] = useState<Stand>('normaal');
   const [teVerwijderen, setTeVerwijderen] = useState<string | null>(null);
@@ -642,6 +647,15 @@ export function Live({
   const naam = naamOp(spelers);
   const periode = wedstrijd.actievePeriode;
   const opstelling = opstellingNu(wedstrijd, periode);
+  const huidigeFormatie = formatieVan(opstelling);
+  // Na een formatiewissel tonen we alleen de plekken die nu bezet zijn: de
+  // lege plekken uit het plan horen dan niet meer bij de formatie.
+  const formatieGewijzigd = actief(wedstrijd.gebeurtenissen).some(
+    (g) => g.type === 'formatie' && g.periode === periode
+  );
+  const veldPosities = formatieGewijzigd
+    ? ALLE_POSITIES.filter((p) => opstelling[p.id]).map((p) => p.id)
+    : posities;
   // Een keuze uit een andere periode, of van een speler die intussen is
   // gewisseld, telt niet meer.
   const ruilSpeler =
@@ -725,7 +739,7 @@ export function Live({
         </button>
       </div>
 
-      <div className="live-actions">
+      <div className={`live-actions ${afgerond ? '' : 'vier'}`}>
         <button type="button" onClick={() => setKiezer(kiezer === 'doelpunt' ? null : 'doelpunt')}>
           <span aria-hidden="true">⚽</span>
           <strong>Doelpunt voor</strong>
@@ -744,7 +758,40 @@ export function Live({
           <span aria-hidden="true">↔</span>
           <strong>Wissel</strong>
         </button>
+        {!afgerond && (
+          <button
+            type="button"
+            onClick={() => setKiezer(kiezer === 'formatie' ? null : 'formatie')}
+          >
+            <span aria-hidden="true">▦</span>
+            <strong>Formatie</strong>
+          </button>
+        )}
       </div>
+
+      {kiezer === 'formatie' && (
+        <div className="chooser" role="group" aria-label="Formatie wijzigen">
+          <p>
+            Nu {huidigeFormatie}. Kies de nieuwe formatie. Iedereen schuift mee, dit telt niet als
+            wissel.
+          </p>
+          {formaties.map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={f === huidigeFormatie ? 'huidig' : ''}
+              disabled={f === huidigeFormatie}
+              onClick={() => {
+                onFormatie(f);
+                setRuil(null);
+                setKiezer(null);
+              }}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
 
       {kiezer === 'doelpunt' && (
         <div className="chooser" role="group" aria-label="Kies de doelpuntenmaker">
@@ -833,13 +880,13 @@ export function Live({
       )}
 
       <Veld
-        posities={posities}
+        posities={veldPosities}
         opstelling={opstelling}
         naamVan={naam}
         periodesVan={(id) => periodesGespeeld(wedstrijd, id)}
         geselecteerd={ruilSpeler}
         onKies={kiesPlek}
-        formatie={formatieVan(opstelling)}
+        formatie={huidigeFormatie}
         onVergroot={() => setVergroot(true)}
       />
       {!afgerond && (
@@ -852,15 +899,15 @@ export function Live({
 
       {vergroot && (
         <VolledigVeld
-          titel={`Periode ${periode} · ${formatieVan(opstellingNu(wedstrijd, periode))}`}
+          titel={`Periode ${periode} · ${huidigeFormatie}`}
           onSluit={() => setVergroot(false)}
           stand={veldStand}
           onStand={setVeldStand}
-          posities={posities}
-          opstelling={opstellingNu(wedstrijd, periode)}
+          posities={veldPosities}
+          opstelling={opstelling}
           naamVan={naam}
           periodesVan={(id) => periodesGespeeld(wedstrijd, id)}
-          formatie={formatieVan(opstellingNu(wedstrijd, periode))}
+          formatie={huidigeFormatie}
         />
       )}
 

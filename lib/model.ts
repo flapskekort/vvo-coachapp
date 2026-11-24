@@ -148,6 +148,9 @@ export type GebeurtenisType =
   /** Twee spelers op het veld ruilen van plek. Telt niet als wissel:
    *  spelerUit en spelerIn zijn hier de twee spelers die ruilen. */
   | 'positie'
+  /** Andere formatie tijdens de wedstrijd. Telt niet als wissel. De nieuwe
+   *  formatie staat in `formatie`; wie waar komt volgt uit herschik(). */
+  | 'formatie'
   /** Markeert een andere gebeurtenis als verwijderd. Zelf een gebeurtenis, zodat
    *  het net als een wissel automatisch bij andere trainers aankomt. */
   | 'verwijderd';
@@ -167,12 +170,23 @@ export type Gebeurtenis = {
   coach?: string;
   /** Bij type 'verwijderd': het id van de gebeurtenis die wordt weggehaald. */
   verwijdert?: string;
+  /** Bij type 'formatie': de nieuwe formatie, bijvoorbeeld 1-2-2-1. */
+  formatie?: string;
 };
 
 /** positieId naar spelerId */
 export type Opstelling = Record<string, string>;
 
-export type WedstrijdStatus = 'gepland' | 'bezig' | 'afgerond';
+/** Afgelast: gaat niet door en wordt niet ingehaald. Telt nergens mee. */
+export type WedstrijdStatus = 'gepland' | 'bezig' | 'afgerond' | 'afgelast';
+
+export const STATUSSEN: WedstrijdStatus[] = ['gepland', 'bezig', 'afgerond', 'afgelast'];
+
+/** Een status uit de sheet; alles wat onbekend is, wordt gepland. */
+export function leesStatus(waarde: unknown): WedstrijdStatus {
+  const s = String(waarde ?? '');
+  return (STATUSSEN as string[]).includes(s) ? (s as WedstrijdStatus) : 'gepland';
+}
 
 export type Wedstrijd = {
   id: string;
@@ -208,6 +222,8 @@ export type WedstrijdVelden = {
   tegenstander: string;
   thuis: boolean;
   competitieperiode: number;
+  /** Alleen meegeven om een wedstrijd af te gelasten of terug te zetten naar gepland. */
+  status?: WedstrijdStatus;
 };
 
 export function legeWedstrijd(id: string, teamGrootte = 6): Wedstrijd {
@@ -273,11 +289,46 @@ export function opVolgorde(gebeurtenissen: Gebeurtenis[]): Gebeurtenis[] {
   });
 }
 
-/** Wissels en plekruilen samen, in volgorde. Samen bepalen ze wie waar staat. */
+/** Wissels, plekruilen en formatiewissels, in volgorde. Samen bepalen ze wie waar staat. */
 function veranderingenIn(wedstrijd: Wedstrijd, periode: number): Gebeurtenis[] {
   return opVolgorde(actief(wedstrijd.gebeurtenissen)).filter(
-    (g) => (g.type === 'wissel' || g.type === 'positie') && g.periode === periode
+    (g) =>
+      (g.type === 'wissel' || g.type === 'positie' || g.type === 'formatie') &&
+      g.periode === periode
   );
+}
+
+/** Telt deze gebeurtenis als verandering van de opstelling binnen een periode? */
+export function verandertOpstelling(g: Gebeurtenis): boolean {
+  return g.type === 'wissel' || g.type === 'positie' || g.type === 'formatie';
+}
+
+/**
+ * Zet dezelfde spelers in een andere formatie. De keeper blijft keeper. De
+ * veldspelers houden hun volgorde van achter naar voren en van links naar
+ * rechts: wie achterin stond, staat daarna nog steeds het meest achterin.
+ * Precies zo werkt het ook bij het wijzigen van de formatie in het plan, en
+ * de sheet rekent op dezelfde manier. Daarna kun je met een plekruil
+ * bijsturen.
+ *
+ * Past de formatie niet (te weinig plekken voor wie er staat), dan blijft
+ * alles zoals het was.
+ */
+export function herschik(opstelling: Opstelling, posities: string[]): Opstelling {
+  const veldspelers = ALLE_POSITIES.filter((p) => p.id !== KEEPER_POSITIE)
+    .map((p) => opstelling[p.id])
+    .filter(Boolean);
+  const nieuwePlekken = ALLE_POSITIES.filter(
+    (p) => p.id !== KEEPER_POSITIE && posities.includes(p.id)
+  ).map((p) => p.id);
+  if (veldspelers.length > nieuwePlekken.length) return { ...opstelling };
+
+  const uit: Opstelling = {};
+  if (opstelling[KEEPER_POSITIE]) uit[KEEPER_POSITIE] = opstelling[KEEPER_POSITIE];
+  veldspelers.forEach((speler, i) => {
+    uit[nieuwePlekken[i]] = speler;
+  });
+  return uit;
 }
 
 function wisselsIn(wedstrijd: Wedstrijd, periode: number): Gebeurtenis[] {
@@ -318,6 +369,14 @@ export function opstellingNu(wedstrijd: Wedstrijd, periode: number): Opstelling 
   const stand = beginOpstelling(wedstrijd, periode);
   const plekVan = (id: string) => Object.keys(stand).find((k) => stand[k] === id);
   veranderingenIn(wedstrijd, periode).forEach((g) => {
+    if (g.type === 'formatie') {
+      const gelezen = leesFormatie(g.formatie ?? '', wedstrijd.teamGrootte);
+      if (!gelezen.ok) return;
+      const nieuw = herschik(stand, gelezen.posities);
+      Object.keys(stand).forEach((k) => delete stand[k]);
+      Object.assign(stand, nieuw);
+      return;
+    }
     if (!g.spelerUit || !g.spelerIn) return;
     const plek = plekVan(g.spelerUit);
     if (!plek) return;

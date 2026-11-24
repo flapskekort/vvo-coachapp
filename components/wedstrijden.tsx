@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   COMPETITIEPERIODES,
+  leesStatus,
   stand,
   type Wedstrijd,
   type WedstrijdStatus,
@@ -23,11 +24,12 @@ export type Regel = {
   competitieperiode: number;
 };
 
-const VOLGORDE: WedstrijdStatus[] = ['bezig', 'gepland', 'afgerond'];
+const VOLGORDE: WedstrijdStatus[] = ['bezig', 'gepland', 'afgerond', 'afgelast'];
 const KOP: Record<WedstrijdStatus, string> = {
   bezig: 'Bezig',
   gepland: 'Gepland',
   afgerond: 'Gespeeld',
+  afgelast: 'Afgelast',
 };
 
 /**
@@ -52,9 +54,7 @@ export function maakRegels(
       tijd: String(r.tijd ?? ''),
       tegenstander: String(r.tegenstander ?? ''),
       thuis: String(r.thuis_uit) !== 'uit',
-      status: (['gepland', 'bezig', 'afgerond'].includes(String(r.status))
-        ? String(r.status)
-        : 'gepland') as WedstrijdStatus,
+      status: leesStatus(r.status),
       lokaal: false,
       competitieperiode: Number(r.competitieperiode) || 1,
       stand: standen[String(r.wedstrijd_id)],
@@ -77,7 +77,14 @@ export function maakRegels(
       tegenstander: sheetNieuwer ? sheet.tegenstander : w.tegenstander,
       thuis: sheetNieuwer ? sheet.thuis : w.thuis,
       competitieperiode: sheetNieuwer ? sheet.competitieperiode : (w.competitieperiode ?? 1),
-      status: sheet?.status === 'afgerond' ? 'afgerond' : w.status,
+      // Afsluiten of afgelasten door een andere trainer gaat voor. Terugzetten
+      // van afgelast naar gepland ook, anders blijft deze telefoon hangen.
+      status:
+        sheet?.status === 'afgerond' || sheet?.status === 'afgelast'
+          ? sheet.status
+          : w.status === 'afgelast' && sheet
+            ? sheet.status
+            : w.status,
       lokaal: true,
       stand: standen[w.id] ?? stand(w.gebeurtenissen),
     });
@@ -251,6 +258,8 @@ export function Wedstrijden({
                   <span className="uitslag">
                     {r.stand[0]}-{r.stand[1]}
                   </span>
+                ) : r.status === 'afgelast' ? (
+                  <span className="merk afgelast">Afgelast</span>
                 ) : r.id === actiefId ? (
                   <span className="merk">Actief</span>
                 ) : null}
@@ -279,7 +288,9 @@ export function Wedstrijden({
                     setBewerkId(null);
                   }}
                   onVerwijderVraag={
-                    r.status === 'gepland' ? () => setVerwijderId(r.id) : undefined
+                    r.status === 'gepland' || r.status === 'afgelast'
+                      ? () => setVerwijderId(r.id)
+                      : undefined
                   }
                 />
               )}
@@ -340,6 +351,9 @@ function WedstrijdBewerken({
   const [datum, setDatum] = useState(regel.datum);
   const [tijd, setTijd] = useState(regel.tijd);
   const [thuis, setThuis] = useState(regel.thuis);
+  // Afgelasten kan alleen zolang er nog niet gespeeld is.
+  const kanAfgelasten = regel.status === 'gepland' || regel.status === 'afgelast';
+  const [afgelast, setAfgelast] = useState(regel.status === 'afgelast');
 
   return (
     <div className="veldenblok bewerk-wedstrijd">
@@ -374,6 +388,22 @@ function WedstrijdBewerken({
           ))}
         </select>
       </label>
+      {kanAfgelasten && (
+        <label className="vinkje">
+          <input
+            type="checkbox"
+            checked={afgelast}
+            onChange={(e) => setAfgelast(e.target.checked)}
+          />
+          Afgelast, wordt niet ingehaald
+        </label>
+      )}
+      {kanAfgelasten && afgelast && (
+        <p className="helper">
+          Een afgelaste wedstrijd telt niet mee in de statistieken. Wordt hij toch ingehaald,
+          haal dan dit vinkje weg of pas de datum aan.
+        </p>
+      )}
       <div className="knoprij">
         <button type="button" className="secondary-action" onClick={onAnnuleer}>
           Annuleren
@@ -383,7 +413,14 @@ function WedstrijdBewerken({
           className="primary-action"
           disabled={bezig}
           onClick={() =>
-            onOpslaan({ datum, tijd, tegenstander: tegenstander.trim(), thuis, competitieperiode: cp })
+            onOpslaan({
+              datum,
+              tijd,
+              tegenstander: tegenstander.trim(),
+              thuis,
+              competitieperiode: cp,
+              ...(kanAfgelasten ? { status: afgelast ? 'afgelast' : 'gepland' } : {}),
+            })
           }
         >
           Opslaan

@@ -11,6 +11,8 @@ import {
   PRESETS,
   actief,
   formatieVan,
+  leesStatus,
+  verandertOpstelling,
   klokTijd,
   legeWedstrijd,
   leesFormatie,
@@ -194,7 +196,9 @@ function Coachapp({
     setLokaleWedstrijden(opslag.alleWedstrijden());
     setGekozenCp(opslag.competitieperiode());
     // Geen wedstrijd gekozen: begin in het overzicht in plaats van in een lege wedstrijd.
-    setToonOverzicht(huidig.id === CONCEPT_ID || huidig.status === 'afgerond');
+    setToonOverzicht(
+      huidig.id === CONCEPT_ID || huidig.status === 'afgerond' || huidig.status === 'afgelast'
+    );
     setGeladen(true);
   }, [opslag, teamGrootte]);
 
@@ -429,6 +433,18 @@ function Coachapp({
       omschrijving: `Van plek geruild: ${naam(a)} en ${naam(b)}`,
     });
 
+  /**
+   * Andere formatie tijdens de wedstrijd. Dezelfde spelers blijven staan en
+   * schuiven mee (zie herschik). Telt niet als wisselbeurt.
+   */
+  const wijzigFormatie = (formatie: string) =>
+    registreer({
+      type: 'formatie',
+      periode,
+      formatie,
+      omschrijving: `Formatie gewijzigd naar ${formatie}`,
+    });
+
   const wisselPeriode = (p: number) => {
     if (p < 1 || p > 4) return;
     const vooruit = p > wedstrijd.actievePeriode;
@@ -495,10 +511,11 @@ function Coachapp({
   };
 
   const wisselsDezePeriode = actief(wedstrijd.gebeurtenissen).some(
-    (g) => (g.type === 'wissel' || g.type === 'positie') && g.periode === periode
+    (g) => verandertOpstelling(g) && g.periode === periode
   );
-  // Alleen kiezen aan het begin van een periode. Zijn er al wissels of
-  // plekruilen gedaan, dan zou omschakelen die op een andere basis zetten.
+  // Alleen kiezen aan het begin van een periode. Zijn er al wissels,
+  // plekruilen of formatiewissels gedaan, dan zou omschakelen die op een
+  // andere basis zetten.
   const toonOvernameKeuze = planWijktAf(wedstrijd, periode) && !wisselsDezePeriode;
 
   /**
@@ -664,9 +681,7 @@ function Coachapp({
       tijd: data.wedstrijd?.tijd ?? '',
       tegenstander: data.wedstrijd?.tegenstander ?? '',
       thuis: data.wedstrijd ? data.wedstrijd.thuis_uit !== 'uit' : true,
-      status: (['gepland', 'bezig', 'afgerond'].includes(String(data.wedstrijd?.status))
-        ? String(data.wedstrijd?.status)
-        : 'gepland') as Wedstrijd['status'],
+      status: leesStatus(data.wedstrijd?.status),
       opstellingen,
       gebeurtenissen: opVolgorde(data.gebeurtenissen.map(naarGebeurtenis)),
       aanwezig: Object.fromEntries(data.aanwezigheid.map((r) => [r.speler_id, r.aanwezig])),
@@ -748,7 +763,7 @@ function Coachapp({
     setGeselecteerd(null);
     setStatus(null);
     setToonOverzicht(false);
-    setFase(nieuw.status === 'gepland' ? 'Aanwezigheid' : 'Live');
+    setFase(nieuw.status === 'gepland' || nieuw.status === 'afgelast' ? 'Aanwezigheid' : 'Live');
   };
 
   const openWedstrijd = async (id: string, lokaal: boolean) => {
@@ -905,7 +920,7 @@ function Coachapp({
    */
   const vandaag = new Date().toISOString().slice(0, 10);
   const volgende = [...regels]
-    .filter((r) => r.status !== 'afgerond' && r.datum >= vandaag)
+    .filter((r) => r.status === 'gepland' && r.datum >= vandaag)
     .sort((a, b) => a.datum.localeCompare(b.datum))[0];
   const actieveCp =
     gekozenCp ??
@@ -1007,7 +1022,14 @@ function Coachapp({
                 {wedstrijd.thuis ? 'Thuiswedstrijd' : 'Uitwedstrijd'} · {teamGrootte} tegen{' '}
                 {teamGrootte}
                 {wedstrijd.status === 'afgerond' ? ' · afgesloten' : ''}
+                {wedstrijd.status === 'afgelast' ? ' · afgelast' : ''}
               </p>
+              {wedstrijd.status === 'afgelast' && (
+                <p className="kaart-melding" role="status">
+                  Deze wedstrijd is afgelast en telt nergens mee. Toch spelen? Zet hem via het
+                  potloodje in het wedstrijdoverzicht terug op gepland.
+                </p>
+              )}
               {nieuwerePlan && (
                 <p className="kaart-melding" role="status">
                   {nieuwerePlan.door ? `${nieuwerePlan.door} heeft` : 'Iemand heeft'}{' '}
@@ -1028,7 +1050,7 @@ function Coachapp({
             <button
               type="button"
               className="primary-action"
-              disabled={Boolean(nieuwerePlan) && fase !== 'Live'}
+              disabled={(Boolean(nieuwerePlan) && fase !== 'Live') || wedstrijd.status === 'afgelast'}
               onClick={() => {
                 // Niet aftrappen met een verouderd plan: dan zien trainers
                 // verschillende opstellingen terwijl ze dezelfde wissels krijgen.
@@ -1131,6 +1153,8 @@ function Coachapp({
               onDoelpuntTegen={doelpuntTegen}
               onWissel={voerWisselUit}
               onRuil={ruilVanPlek}
+              formaties={PRESETS[teamGrootte] ?? []}
+              onFormatie={wijzigFormatie}
               onOngedaan={maakOngedaan}
               kanOngedaan={Boolean(eigenLaatste)}
               onVerversen={() => void synchroniseer()}

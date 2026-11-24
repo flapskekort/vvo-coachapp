@@ -61,6 +61,7 @@ export type GebeurtenisRij = {
   coach: string;
   omschrijving: string;
   verwijdert?: string;
+  formatie?: string;
 };
 
 export type SeizoenRij = {
@@ -239,6 +240,7 @@ export function voegGebeurtenisToe(
       coach: gebeurtenis.coach ?? '',
       omschrijving: gebeurtenis.omschrijving,
       verwijdert: gebeurtenis.verwijdert ?? '',
+      formatie: gebeurtenis.formatie ?? '',
     },
   });
 }
@@ -354,5 +356,6 @@ export function naarGebeurtenis(r: GebeurtenisRij): Gebeurtenis {
     spelerIn: r.speler_in || undefined,
     coach: r.coach || undefined,
     verwijdert: r.verwijdert || undefined,
+    formatie: r.formatie || undefined,
   };
 }

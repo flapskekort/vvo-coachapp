@@ -1,5 +1,33 @@
 VVO CoachApp
-Build: 2026-11-11
+Build: 2026-11-24
+
+App en Code.gs 2026-11-24
+Formatie wijzigen tijdens de wedstrijd
+- In Live staat een vierde knop Formatie. Kies een andere formatie, dan
+  schuift iedereen mee: de keeper blijft keeper, de veldspelers houden hun
+  volgorde van achter naar voren en van links naar rechts. Bijsturen doe je
+  daarna met een plekruil.
+- Telt niet als wissel of wisselbeurt. Staat op de tijdlijn, komt bij de
+  andere trainers aan en is ongedaan te maken.
+- Analyse_periodes heeft een kolom formatie_eind: de formatie aan het eind
+  van de periode, alleen ingevuld als die tijdens de periode is gewijzigd.
+
+Afgelaste wedstrijden
+- Via het potloodje: vinkje "Afgelast, wordt niet ingehaald". Kan alleen
+  bij een wedstrijd die nog niet gespeeld is. Vinkje weghalen zet hem terug
+  op gepland.
+- Afgelaste wedstrijden staan onderaan het overzicht onder "Afgelast" en
+  kunnen niet worden gestart.
+- Statistieken en bouwAnalyse tellen alleen gespeelde wedstrijden. Dat
+  betekent ook: een geplande wedstrijd met een klaarstaand plan telt niet
+  meer mee (eerder kregen spelers daar al periodes voor).
+
+WAT JE MOET DOEN (deze keer wel setup)
+In BEIDE sheets: Code.gs vervangen, opslaan, setup draaien (logboek:
+"Toegevoegd: Gebeurtenissen.formatie"), Implementeren > Implementatie
+beheren > potlood > Versie: Nieuw. Daarna de app publiceren.
+
+Eerder, build 2026-11-11:
 
 App en Code.gs 2026-11-11: van plek ruilen tijdens de wedstrijd
 - In Live tik je een speler op het veld en daarna een tweede: ze ruilen van
@@ -75,6 +103,6 @@ In BEIDE sheets:
 Daarna de app publiceren:
    pnpm install
    pnpm build
-   npx wrangler deploy -c dist/server/wrangler.json --message "2026-11-11"
+   npx wrangler deploy -c dist/server/wrangler.json --message "2026-11-24"
 
-Controle: head -2 VERSIE.txt  (hoort Build: 2026-11-11)
+Controle: head -2 VERSIE.txt  (hoort Build: 2026-11-24)

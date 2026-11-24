@@ -42,6 +42,7 @@ var SCHEMA = {
     'coach',
     'omschrijving',
     'verwijdert',
+    'formatie',
   ],
   Wijzigingslog: [
     'wijziging_id',
@@ -325,6 +326,54 @@ function categorieVan_(sleutel) {
   return sleutel === 'keeper' ? 'Keeper' : String(sleutel).split('-')[0];
 }
 
+var LINIES_ = ['Verdediger', 'Middenvelder', 'Aanvaller'];
+var PLEKKEN_ = ['links', 'midden', 'rechts'];
+var VERDELING_ = { 0: [], 1: ['midden'], 2: ['links', 'rechts'], 3: ['links', 'midden', 'rechts'] };
+
+/** Alle plekken in vaste volgorde: keeper, dan van achter naar voren, links naar rechts. */
+function allePlekken_() {
+  var uit = ['keeper'];
+  LINIES_.forEach(function (c) {
+    PLEKKEN_.forEach(function (p) { uit.push(c + '-' + p); });
+  });
+  return uit;
+}
+
+/** Plekken van een formatie als 1-2-1-2 of 2-1-2. Ongeldig geeft null. */
+function plekkenVanFormatie_(tekst) {
+  var delen = String(tekst || '').split(/[^0-9]+/).filter(Boolean).map(Number);
+  var linies = delen.length === 4 && delen[0] === 1 ? delen.slice(1) : delen.length === 3 ? delen : null;
+  if (!linies || linies.some(function (n) { return n > 3; })) return null;
+  var uit = ['keeper'];
+  LINIES_.forEach(function (c, i) {
+    VERDELING_[linies[i]].forEach(function (p) { uit.push(c + '-' + p); });
+  });
+  return uit;
+}
+
+/**
+ * Zelfde spelers in een andere formatie, precies zoals de app het doet
+ * (herschik in lib/model.ts): keeper blijft keeper, veldspelers houden hun
+ * volgorde van achter naar voren en van links naar rechts.
+ */
+function herschik_(stand, plekken) {
+  var volgorde = allePlekken_();
+  var veldspelers = volgorde.filter(function (k) { return k !== 'keeper' && stand[k]; })
+    .map(function (k) { return stand[k]; });
+  var nieuw = volgorde.filter(function (k) { return k !== 'keeper' && plekken.indexOf(k) >= 0; });
+  if (veldspelers.length > nieuw.length) return null;
+  var uit = {};
+  if (stand.keeper) uit.keeper = stand.keeper;
+  veldspelers.forEach(function (sp, i) { uit[nieuw[i]] = sp; });
+  return uit;
+}
+
+function formatieVanStand_(stand) {
+  return [1].concat(LINIES_.map(function (c) {
+    return PLEKKEN_.filter(function (p) { return stand[c + '-' + p]; }).length;
+  })).join('-');
+}
+
 /**
  * Het verloop van één wedstrijd, per periode:
  *   begin     positie -> speler waarmee de periode begon
@@ -355,6 +404,7 @@ function verloopVan_(opstellingen, gebeurtenissen) {
     });
 
     var stand = {};
+    var formatieGewijzigd = false;
     var gespeeld = {};
     var rollen = {};
     Object.keys(begin).forEach(function (k) {
@@ -368,7 +418,19 @@ function verloopVan_(opstellingen, gebeurtenissen) {
     // linie staat.
     gebeurtenissen.forEach(function (g) {
       var type = String(g.type);
-      if ((type !== 'wissel' && type !== 'positie') || Number(g.periode) !== p) return;
+      if (Number(g.periode) !== p) return;
+      if (type === 'formatie') {
+        var plekken = plekkenVanFormatie_(g.formatie);
+        var nieuw = plekken && herschik_(stand, plekken);
+        if (!nieuw) return;
+        stand = nieuw;
+        Object.keys(stand).forEach(function (k) {
+          (rollen[stand[k]] = rollen[stand[k]] || {})[categorieVan_(k)] = true;
+        });
+        formatieGewijzigd = true;
+        return;
+      }
+      if (type !== 'wissel' && type !== 'positie') return;
       var uit = String(g.speler_uit || '');
       var erin = String(g.speler_in || '');
       if (!uit || !erin) return;
@@ -399,10 +461,21 @@ function verloopVan_(opstellingen, gebeurtenissen) {
       rollen: rollen,
       ingevuld: Object.keys(begin).length > 0,
       doorgegaan: doorgegaan,
+      eindFormatie: formatieGewijzigd ? formatieVanStand_(stand) : '',
     };
     vorigeEind = stand;
   }
   return periodes;
+}
+
+/**
+ * Telt deze wedstrijd mee in statistieken en analyse? Gepland (nog niet
+ * gespeeld, al wel een plan) en afgelast tellen niet: anders krijgen spelers
+ * periodes op hun naam voor een wedstrijd die niet is gespeeld.
+ */
+function gespeeld_(w) {
+  var s = String(w.status);
+  return s !== 'gepland' && s !== 'afgelast';
 }
 
 function inCompetitieperiode_(w, competitieperiode) {
@@ -443,7 +516,7 @@ function seizoenOverzicht_(competitieperiode) {
   });
 
   var wedstrijden = data.wedstrijden.filter(function (w) {
-    return inCompetitieperiode_(w, competitieperiode);
+    return gespeeld_(w) && inCompetitieperiode_(w, competitieperiode);
   });
 
   var per = {};
@@ -647,6 +720,7 @@ function gebeurtenisToevoegen_(payload, coach) {
     coach: g.coach || coach || '',
     omschrijving: g.omschrijving || '',
     verwijdert: g.verwijdert || '',
+    formatie: g.formatie || '',
   };
   blad.appendRow(naarRij_(koppen, rij));
 
@@ -837,6 +911,7 @@ function naarGebeurtenisRij_(r) {
     coach: String(r.coach || ''),
     omschrijving: String(r.omschrijving || ''),
     verwijdert: String(r.verwijdert || ''),
+    formatie: String(r.formatie || ''),
   };
 }
 
@@ -955,7 +1030,7 @@ function json_(waarde) {
 var ANALYSE_PERIODES = [
   'wedstrijd_id','datum','competitieperiode','tegenstander','thuis_uit','periode',
   'doelpunten_voor','doelpunten_tegen','saldo','formatie','start','wissels',
-  'begin_periode','keeper',
+  'begin_periode','keeper','formatie_eind',
 ];
 
 var ANALYSE_SPELERS = [
@@ -982,6 +1057,7 @@ function bouwAnalyse() {
   var perSpeler = [];
 
   data.wedstrijden.forEach(function (w) {
+    if (!gespeeld_(w)) return;
     var id = w.wedstrijd_id;
     var geb = gebPer[id] || [];
     var verl = verloopVan_(opstPer[id] || [], geb);
@@ -1008,6 +1084,7 @@ function bouwAnalyse() {
           perPeriode.push(Object.assign({}, basis, {
             periode: 0, doelpunten_voor: voor, doelpunten_tegen: tegen, saldo: voor - tegen,
             formatie: '', start: 'onbekend', wissels: 0, begin_periode: '', keeper: '',
+            formatie_eind: '',
           }));
         }
         continue;
@@ -1036,6 +1113,8 @@ function bouwAnalyse() {
         wissels: inPeriode.filter(function (g) { return String(g.type) === 'wissel'; }).length,
         begin_periode: start,
         keeper: naamVan[verl[p].begin.keeper] || '',
+        // Alleen ingevuld als de formatie tijdens de periode is gewijzigd.
+        formatie_eind: verl[p].eindFormatie || '',
       }));
     }
 

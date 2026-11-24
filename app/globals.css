@@ -1817,3 +1817,30 @@ select {
 .cp-vergelijk b.min {
   color: var(--rood);
 }
+
+/* Afgelaste wedstrijd */
+.wedstrijd-regel .merk.afgelast {
+  background: var(--line);
+  color: var(--muted);
+}
+.veldenblok label.vinkje {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--navy);
+}
+.veldenblok label.vinkje input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+/* Formatie wijzigen tijdens de wedstrijd */
+.live-actions.vier {
+  grid-template-columns: repeat(4, 1fr);
+}
+.chooser button.huidig {
+  border-color: var(--navy);
+  box-shadow: inset 0 0 0 1px var(--navy);
+}
